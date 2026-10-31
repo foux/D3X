@@ -683,37 +683,56 @@ func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, k
 	if cfg == nil || !cfg.Links.On || !cfg.Links.Publish {
 		reason = "les liens pour les publications sont éteints (Réglages ▸ Liens)"
 	}
+	// Le serveur installe toujours un créateur de liens : sans lui, c'est
+	// forcément le réglage éteint ou l'absence de dossier de liens.
 	link := e.publishLinker(cfg, tg)
 	if link == nil {
 		return "", &LinkError{Reason: reason}
 	}
 	t, err := torrent.Parse(raw)
 	if err != nil {
-		return "", errors.New("le .torrent reçu de V3X est illisible")
+		return "", &LinkError{Reason: "le .torrent reçu de V3X est illisible", Err: err}
 	}
 	dir := strings.TrimSpace(tg.LinksDir)
 	srcDir = strings.TrimSpace(srcDir)
-	// Un torrent du client occupe déjà cet emplacement du dossier de liens :
-	// on ne pose rien dessus. Un chemin vide (client qui ne le donne pas) ne
-	// compte pas : il serait « au-dessus » de tout. Sans la liste du client,
-	// on ne pose rien à l'aveugle : l'appelant se replie sur l'origine.
-	target := clientJoin(dir, t.Name)
+	// Sans la liste du client, on ne pose rien à l'aveugle : l'appelant se
+	// replie sur l'origine.
 	all, err := tg.Client.List(ctx, nil)
 	if err != nil {
 		return "", &LinkError{Reason: "liste du client illisible : " + err.Error(), Err: err}
 	}
-	for _, x := range all {
-		if strings.TrimSpace(x.ContentPath) == "" {
-			continue
-		}
-		if under(x.ContentPath, target) || under(target, x.ContentPath) {
-			return "", &LinkError{Reason: "« " + t.Name + " » est déjà l'emplacement d'un torrent dans ton dossier de liens"}
-		}
+	if _, busy := occupied(all, clientJoin(dir, t.Name)); busy {
+		return "", &LinkError{Reason: "« " + t.Name + " » est déjà l'emplacement d'un torrent dans ton dossier de liens"}
 	}
 	lp := make([]links.Pair, 0, len(t.Files))
 	for _, f := range t.Files {
 		lp = append(lp, links.Pair{Src: clientJoin(srcDir, f.Path), Dst: clientJoin(dir, f.Path), Size: f.Size})
 	}
+	return e.linkAndAdd(ctx, tg, cfg, link, dir, lp, key, id, raw)
+}
+
+// occupied dit si un torrent du client occupe déjà l'emplacement target du
+// dossier de liens (son contenu est dessous ou au-dessus) et renvoie son
+// chemin. Un chemin vide (client qui ne le donne pas) ne compte pas : il
+// serait « au-dessus » de tout et refuserait n'importe quel ajout.
+func occupied(all []client.Torrent, target string) (string, bool) {
+	for _, x := range all {
+		if strings.TrimSpace(x.ContentPath) == "" {
+			continue
+		}
+		if under(x.ContentPath, target) || under(target, x.ContentPath) {
+			return x.ContentPath, true
+		}
+	}
+	return "", false
+}
+
+// linkAndAdd pose les liens lp dans dir, puis ajoute le torrent à l'arrêt sur
+// dir, le vérifie et le suit (AddAndVerify). Tant que rien n'est entré dans
+// le client, l'échec est un *LinkError et les liens sont retirés ; ils le
+// sont aussi pour ErrInClient. Réussi, l'ajout retient ses liens (Remove les
+// enlèvera).
+func (e *Engine) linkAndAdd(ctx context.Context, tg Target, cfg *config.Config, link Linker, dir string, lp []links.Pair, key, id string, raw []byte) (string, error) {
 	if err := link(ctx, tg.PathMap, dir, lp, false); err != nil {
 		return "", &LinkError{Reason: "liens : " + err.Error(), Err: err}
 	}

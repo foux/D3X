@@ -226,3 +226,33 @@ func TestRemoveLinked(t *testing.T) {
 		t.Fatalf("après retrait : %+v", st)
 	}
 }
+
+// Cross-seed « noms différents » par liens : un torrent du client sans chemin
+// (client qui ne le donne pas) n'occupe aucun emplacement ; un vrai occupant
+// refuse toujours l'ajout. Le créateur de liens échoue exprès : l'atteindre
+// prouve que le contrôle d'emplacement est passé.
+func TestAddLinkedRenamedIgnoresEmptyContentPath(t *testing.T) {
+	isolatedConfig(t)
+	raw := mkTorrent("Occupe", map[string]int64{"X.mkv": 7}, "https://announce.v3x.club/pk/announce", "")
+	p, err := torrent.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(nil)
+	tg := Target{ID: "q", LinksDir: "/data/liens"}
+	reached := 0
+	link := func(_ context.Context, _ []pathmap.Rule, _ string, _ []links.Pair, _ bool) error {
+		reached++
+		return errors.New("disque plein")
+	}
+	pairs := []client.Rename{{Index: 0, From: "Occupe/X.mkv", To: "Autre Copie/x.mkv"}}
+	r := &Row{Key: "k", Match: &v3x.Match{ID: "id"}}
+	st, detail := e.addLinked(context.Background(), tg, config.Defaults(), r, link, raw, p, "/data/autre", pairs, []client.Torrent{{Name: "sans chemin", ContentPath: ""}})
+	if reached != 1 || st != StRenamed || detail != "liens : disque plein" {
+		t.Fatalf("chemin vide : %d appel(s), %s, %q", reached, st, detail)
+	}
+	st, detail = e.addLinked(context.Background(), tg, config.Defaults(), r, link, raw, p, "/data/autre", pairs, []client.Torrent{{ContentPath: ""}, {ContentPath: "/data/liens/Occupe"}})
+	if reached != 1 || st != StRenamed || !strings.Contains(detail, "déjà l'emplacement") {
+		t.Fatalf("occupé : %d appel(s), %s, %q", reached, st, detail)
+	}
+}
