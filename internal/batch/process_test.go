@@ -341,6 +341,16 @@ func TestProcessLinks(t *testing.T) {
 	if time.Since(start) > 5*time.Second {
 		t.Fatal("option refusée : l'ajout au client a été attendu")
 	}
+
+	// Le seed a échoué après la pose des liens : pas de « liens dans ».
+	d, p = happy(releases.Entry{Name: "A", Path: "/r/A", Video: true, Size: 10})
+	p.published = func(j *publish.Job) {
+		j.SeedVia, j.LinksDir, j.SeedError = "links", "/liens", "le client n'a pas confirmé l'ajout"
+	}
+	r = run(t, quick(d), Options{Links: true}, "/r/A")
+	if en := r.Entries[0]; en.State != "published" || strings.Contains(en.Detail, "liens dans") {
+		t.Fatalf("seed en échec : %+v", en)
+	}
 }
 
 func TestProcessWaitChecked(t *testing.T) {

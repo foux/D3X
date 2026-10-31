@@ -161,9 +161,11 @@ func (e *Engine) process(l *lot, en *Entry) {
 	}
 	l.job = j.ID
 	cancel := func() { e.deps.PubCancel(j.ID); l.job = "" }
-	if err := e.deps.PubSetLinks(j.ID, o.Links); err != nil && o.Links {
-		// Refusée : elle partira sur ses fichiers d'origine, la ligne dira pourquoi.
-		e.set(func(*Run) { en.linksRefused = err.Error() })
+	if !o.Sim { // simulée, la publication est annulée : rien à poser
+		if err := e.deps.PubSetLinks(j.ID, o.Links); err != nil && o.Links {
+			// Refusée : elle partira sur ses fichiers d'origine, la ligne dira pourquoi.
+			e.set(func(*Run) { en.linksRefused = err.Error() })
+		}
 	}
 	if j.Duplicate != nil {
 		cancel()
@@ -558,13 +560,18 @@ func (e *Engine) noteLinks(l *lot, en *Entry) {
 		})
 		return
 	}
+	r := l.r
 	deadline := time.Now().Add(e.noteWait)
+	e.progress(fmt.Sprintf("Lot : %d / %d", r.Done+1, r.Total), "ajout de "+en.Name+" au client…")
 	for {
 		j, ok := e.deps.PubGet(en.Job)
 		if !ok || j == nil {
 			return
 		}
 		if j.State == publish.StDone {
+			if j.SeedError != "" { // seed en échec : dit par waitChecked, pas de voie à donner
+				return
+			}
 			add := ""
 			switch {
 			case j.LinksNote != "":
