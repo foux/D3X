@@ -391,7 +391,7 @@ func (e *Engine) addLinked(ctx context.Context, tg Target, cfg *config.Config, r
 		lp = append(lp, links.Pair{Src: clientJoin(save, p.To), Dst: clientJoin(dir, p.From), Size: size[p.Index]})
 	}
 	for root := range roots {
-		if _, busy := occupied(all, clientJoin(dir, root)); busy {
+		if occupied(all, clientJoin(dir, root)) {
 			return StRenamed, "« " + root + " » est déjà l'emplacement d'un torrent dans ton dossier de liens"
 		}
 	}

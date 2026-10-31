@@ -701,7 +701,7 @@ func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, k
 	if err != nil {
 		return "", &LinkError{Reason: "liste du client illisible : " + err.Error(), Err: err}
 	}
-	if _, busy := occupied(all, clientJoin(dir, t.Name)); busy {
+	if occupied(all, clientJoin(dir, t.Name)) {
 		return "", &LinkError{Reason: "« " + t.Name + " » est déjà l'emplacement d'un torrent dans ton dossier de liens"}
 	}
 	lp := make([]links.Pair, 0, len(t.Files))
@@ -712,19 +712,19 @@ func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, k
 }
 
 // occupied dit si un torrent du client occupe déjà l'emplacement target du
-// dossier de liens (son contenu est dessous ou au-dessus) et renvoie son
-// chemin. Un chemin vide (client qui ne le donne pas) ne compte pas : il
-// serait « au-dessus » de tout et refuserait n'importe quel ajout.
-func occupied(all []client.Torrent, target string) (string, bool) {
+// dossier de liens (son contenu est dessous ou au-dessus). Un chemin vide
+// (client qui ne le donne pas) ne compte pas : il serait « au-dessus » de
+// tout et refuserait n'importe quel ajout.
+func occupied(all []client.Torrent, target string) bool {
 	for _, x := range all {
 		if strings.TrimSpace(x.ContentPath) == "" {
 			continue
 		}
 		if under(x.ContentPath, target) || under(target, x.ContentPath) {
-			return x.ContentPath, true
+			return true
 		}
 	}
-	return "", false
+	return false
 }
 
 // linkAndAdd pose les liens lp dans dir, puis ajoute le torrent à l'arrêt sur
