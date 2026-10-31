@@ -788,10 +788,16 @@ func (e *Engine) Remove(key string) error {
 	detail := "retiré du client, fichiers intacts"
 	if len(lp) > 0 {
 		detail = "retiré du client, liens retirés, fichiers intacts"
+		left := "retiré du client, fichiers intacts ; liens laissés dans « " + ldir + " »"
 		if link == nil {
-			detail = "retiré du client, fichiers intacts ; liens laissés en place (créateur de liens absent)"
-		} else if lerr := link(ctx, t.PathMap, ldir, lp, true); lerr != nil {
-			detail = "retiré du client, fichiers intacts ; liens : " + lerr.Error()
+			detail = left
+		} else {
+			// Son propre délai : le retrait du client a pu consommer celui de ctx.
+			lctx, lcancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if lerr := link(lctx, t.PathMap, ldir, lp, true); lerr != nil {
+				detail = left + " : " + lerr.Error()
+			}
+			lcancel()
 		}
 	}
 	e.mu.Lock()
