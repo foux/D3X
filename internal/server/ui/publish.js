@@ -630,7 +630,9 @@ function renderJob() {
   // Seed par liens (Réglages ▸ Liens ▸ « Mes publications aussi ») : la case
   // n'apparaît que si le client a un dossier de liens, jusqu'à l'envoi.
   const linksRow = $("#pub-links-row");
-  const canLink = !!(ui.state && ui.state.links && ui.state.links.publish) && !!j.linksDir && !j.published && j.state !== "publishing";
+  // Même gel que SetLinks côté serveur : ni pendant/après la publication, ni
+  // une fois le seed lancé (« Seeder la release V3X » compris).
+  const canLink = !!(ui.state && ui.state.links && ui.state.links.on && ui.state.links.publish) && !!j.linksDir && !j.published && !j.seedOnly && !["publishing", "seeding", "done"].includes(j.state);
   linksRow.classList.toggle("hidden", !canLink);
   if (canLink) {
     $("#pub-links-dir").textContent = j.linksDir;
@@ -1535,11 +1537,23 @@ function showPubError(msg) {
 // (SeedExisting) : mêmes étapes qu'après une publication.
 function seedText(j, what) {
   if (j.seedError) return "Seed : " + j.seedError + ".";
-  if (j.seedNote) return "Seed : " + j.seedNote + ".";
-  if (j.state === "seeding") return "Seed : ajout de " + what + " à ton client…";
-  if (!j.seed || (j.seed.status === "checking" && !j.seed.detail)) return "Seed : ton client vérifie les fichiers" + (j.seed && j.seed.progress ? " (" + Math.round(j.seed.progress * 100) + " %)" : "") + "…";
-  if (j.seed.status === "seeding") return "Seed : vérifié à 100 %, " + what + " est en seed.";
-  return "Seed : " + (j.seed.detail || j.seed.status);
+  let t;
+  if (j.seedNote) t = "Seed : " + j.seedNote + ".";
+  else if (j.state === "seeding") t = "Seed : ajout de " + what + " à ton client…";
+  else if (!j.seed || (j.seed.status === "checking" && !j.seed.detail)) t = "Seed : ton client vérifie les fichiers" + (j.seed && j.seed.progress ? " (" + Math.round(j.seed.progress * 100) + " %)" : "") + "…";
+  else if (j.seed.status === "seeding") t = "Seed : vérifié à 100 %, " + what + " est en seed.";
+  else t = "Seed : " + (j.seed.detail || j.seed.status);
+  return t + linksOutcome(j);
+}
+
+// Voie du seed, à la suite du texte de seed : repli sur les fichiers d'origine
+// (avec sa raison) ou rangement par liens. Rien quand le seed a échoué, ce
+// serait contradictoire.
+function linksOutcome(j) {
+  if (j.seedError) return "";
+  if (j.linksNote) return " " + j.linksNote.charAt(0).toUpperCase() + j.linksNote.slice(1) + ", seed sur les fichiers d'origine.";
+  if (j.seedVia === "links") return " Rangée par liens dans « " + j.linksDir + " ».";
+  return "";
 }
 
 function renderDone() {
@@ -1558,8 +1572,7 @@ function renderDone() {
   else if (!j.seed || (j.seed.status === "checking" && !j.seed.detail)) seed = "Seed : ton client vérifie les fichiers" + (j.seed && j.seed.progress ? " (" + Math.round(j.seed.progress * 100) + " %)" : "") + "…";
   else if (j.seed.status === "seeding") seed = "Seed : vérifié à 100 %, ta release est en seed.";
   else seed = "Seed : " + (j.seed.detail || j.seed.status);
-  if (j.linksNote) seed += " " + j.linksNote.charAt(0).toUpperCase() + j.linksNote.slice(1) + ", seed sur les fichiers d'origine.";
-  else if (j.seedVia === "links") seed += " Rangée par liens dans « " + j.linksDir + " ».";
+  seed += linksOutcome(j);
   const s = el("p", null, seed);
   const again = el("button", "btn", "Publier une autre release");
   again.type = "button";
