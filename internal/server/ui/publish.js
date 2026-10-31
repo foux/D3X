@@ -627,6 +627,16 @@ function renderJob() {
   const who = multi ? "« " + j.clientName + " »" : "Ton client";
   if (j.mapGuess) mapText = who + " verra ce dossier comme « " + j.clientDir + " » (déduit de " + j.mapVotes + " torrent" + (j.mapVotes > 1 ? "s" : "") + " de " + (multi ? "ce client" : "ton client") + "). ";
   else mapText = who + " cherchera les fichiers dans « " + j.clientDir + " ». ";
+  // Seed par liens (Réglages ▸ Liens ▸ « Mes publications aussi ») : la case
+  // n'apparaît que si le client a un dossier de liens, jusqu'à l'envoi.
+  const linksRow = $("#pub-links-row");
+  const canLink = !!(ui.state && ui.state.links && ui.state.links.publish) && !!j.linksDir && !j.published && j.state !== "publishing";
+  linksRow.classList.toggle("hidden", !canLink);
+  if (canLink) {
+    $("#pub-links-dir").textContent = j.linksDir;
+    if (document.activeElement !== $("#pub-links")) $("#pub-links").checked = !!j.links;
+  }
+  if (j.links) mapText += "Rangée dans « " + j.linksDir + " », ses fichiers étant des liens vers ceux-là. ";
   setStep("#st-map", j.mapGuess || j.mapVotes ? "ok" : "", mapText);
   const fix = el("button", "link", "Corriger");
   fix.type = "button";
@@ -675,6 +685,20 @@ async function pickClient(ev) {
     if (pub.job) sel.value = pub.job.client;
   } finally {
     sel.disabled = false;
+  }
+}
+
+async function toggleLinks(ev) {
+  const box = ev.target;
+  box.disabled = true;
+  try {
+    pub.job = await api("/ui/pub/" + pub.job.id + "/links", { on: box.checked });
+    renderJob();
+  } catch (e) {
+    if (e.message !== "session") toast(e.message, "bad");
+    if (pub.job) box.checked = !!pub.job.links;
+  } finally {
+    box.disabled = false;
   }
 }
 
@@ -1466,7 +1490,7 @@ function askPublish() {
         : ["Œuvre", pub.tmdb ? pub.tmdb.title + (pub.tmdb.year ? " (" + pub.tmdb.year + ")" : "") : "aucune"],
     ["Taille", fmtSize(pub.job.total)],
     ["Visibilité", f.anonymous === "true" ? "anonyme" : "sous ton pseudo"],
-    ["Seed", "ajoutée à " + (multiClients() ? "« " + pub.job.clientName + " »" : "ton client") + " dans « " + pub.job.clientDir + " »"],
+    ["Seed", "ajoutée à " + (multiClients() ? "« " + pub.job.clientName + " »" : "ton client") + (pub.job.links ? " par liens dans « " + pub.job.linksDir + " » (original dans « " + pub.job.clientDir + " »)" : " dans « " + pub.job.clientDir + " »")],
   ];
   for (const [k, v] of rows) dl.append(el("dt", null, k), el("dd", null, v));
   $("#f-rights").checked = false;
@@ -1534,6 +1558,8 @@ function renderDone() {
   else if (!j.seed || (j.seed.status === "checking" && !j.seed.detail)) seed = "Seed : ton client vérifie les fichiers" + (j.seed && j.seed.progress ? " (" + Math.round(j.seed.progress * 100) + " %)" : "") + "…";
   else if (j.seed.status === "seeding") seed = "Seed : vérifié à 100 %, ta release est en seed.";
   else seed = "Seed : " + (j.seed.detail || j.seed.status);
+  if (j.linksNote) seed += " " + j.linksNote.charAt(0).toUpperCase() + j.linksNote.slice(1) + " : seed sur les fichiers d'origine.";
+  else if (j.seedVia === "links") seed += " Rangée par liens dans « " + j.linksDir + " ».";
   const s = el("p", null, seed);
   const again = el("button", "btn", "Publier une autre release");
   again.type = "button";
@@ -1644,6 +1670,7 @@ function bindPublish() {
   $("#versions-ignore").addEventListener("click", ignoreRelease);
   $("#map-save").addEventListener("click", saveMap);
   $("#pub-client").addEventListener("change", pickClient);
+  $("#pub-links").addEventListener("change", toggleLinks);
   $("#tmdb-go").addEventListener("click", searchTmdb);
   $("#tmdb-q").addEventListener("keydown", (e) => { if (e.key === "Enter") searchTmdb(); });
   $("#f-notmdb").addEventListener("change", () => { if ($("#f-notmdb").checked) { pub.tmdb = null; $("#tmdb-picked").classList.add("hidden"); loadFicheSoon(); } renderBar(); });
