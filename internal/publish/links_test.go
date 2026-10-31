@@ -68,6 +68,18 @@ func publishDone(t *testing.T, m *Manager, id string) *Job {
 	return g
 }
 
+// publishAdded : comme publishDone, sans attendre que le client ait fini de
+// vérifier (le repli et le drapeau ne dépendent que de l'ajout).
+func publishAdded(t *testing.T, m *Manager, id string) *Job {
+	t.Helper()
+	if err := m.Publish(id, map[string]string{"categoryId": "11", "releaseName": "Film.2024.1080p.WEB.H264-D3X"}); err != nil {
+		t.Fatal(err)
+	}
+	wait(t, func() bool { g, _ := m.Get(id); return g.State == StDone })
+	g, _ := m.Get(id)
+	return g
+}
+
 // « Mes publications aussi » : la release publiée est rangée dans le dossier
 // de liens du client, chaque fichier étant un lien physique vers l'original,
 // et c'est là que le client l'ajoute.
@@ -83,8 +95,8 @@ func TestPublishByLinks(t *testing.T) {
 	m := New(clients, eng, "test")
 
 	j := publishReady(t, m, dir)
-	if !j.Links || j.LinksDir != liens {
-		t.Fatalf("liens attendus dès le départ : links=%v dir=%q", j.Links, j.LinksDir)
+	if g, _ := m.Get(j.ID); !g.Links || g.LinksDir != liens {
+		t.Fatalf("liens attendus dès le départ : links=%v dir=%q", g.Links, g.LinksDir)
 	}
 	g := publishDone(t, m, j.ID)
 	if g.SeedError != "" || g.SeedVia != "links" || g.LinksNote != "" {
@@ -119,7 +131,7 @@ func TestPublishLinksFallback(t *testing.T) {
 	m := New(clients, eng, "test")
 
 	j := publishReady(t, m, dir)
-	g := publishDone(t, m, j.ID)
+	g := publishAdded(t, m, j.ID)
 	if g.SeedError != "" || g.SeedVia != "origin" || !strings.HasPrefix(g.LinksNote, "liens impossibles : ") || g.Links {
 		t.Fatalf("repli : %q via %q note %q links %v", g.SeedError, g.SeedVia, g.LinksNote, g.Links)
 	}
@@ -145,8 +157,8 @@ func TestPublishLinksFlag(t *testing.T) {
 	m := New(clients, crossseed.New(clients), "test")
 
 	j := publishReady(t, m, dir)
-	if j.Client != "c1" || !j.Links {
-		t.Fatalf("départ : client %s links %v", j.Client, j.Links)
+	if g, _ := m.Get(j.ID); g.Client != "c1" || !g.Links {
+		t.Fatalf("départ : client %s links %v", g.Client, g.Links)
 	}
 	if err := m.SetClient(j.ID, "c2"); err != nil {
 		t.Fatal(err)
@@ -166,7 +178,7 @@ func TestPublishLinksFlag(t *testing.T) {
 	if err := m.SetLinks(j.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	g := publishDone(t, m, j.ID)
+	g := publishAdded(t, m, j.ID)
 	if g.SeedVia != "origin" || g.LinksNote != "" {
 		t.Fatalf("éteint pour une fois : via %q note %q", g.SeedVia, g.LinksNote)
 	}

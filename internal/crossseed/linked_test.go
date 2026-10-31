@@ -135,7 +135,7 @@ func TestAddLinkedRefused(t *testing.T) {
 	// Réglage éteint pour les publications.
 	r := newLinkedRig(t, false)
 	_, err := r.e.AddLinked(context.Background(), r.tg, r.cfg, "pub:1", "fiche-1", r.raw, "/data/films")
-	if !errors.As(err, &le) || !strings.Contains(le.Reason, "dossier de liens") || len(r.made) != 0 {
+	if !errors.As(err, &le) || !strings.Contains(le.Reason, "éteints") || len(r.made) != 0 {
 		t.Fatalf("réglage éteint : %v, liens %v", err, r.made)
 	}
 

@@ -416,7 +416,7 @@ func (m *Manager) SetClientDir(id, dir string) (*pathmap.Rule, string, error) {
 	if j == nil {
 		return nil, "", errors.New("publication inconnue")
 	}
-	if j.Published != nil || j.State == StPublishing {
+	if j.Published != nil || j.State == StPublishing || j.State == StSeeding || j.State == StDone {
 		return nil, "", errors.New("release déjà envoyée : son dossier ne change plus")
 	}
 	j.ClientDir = strings.TrimSpace(dir)
@@ -437,7 +437,7 @@ func (m *Manager) SetClient(id, clientID string) error {
 		m.mu.Unlock()
 		return errors.New("publication inconnue")
 	}
-	if j.Published != nil || j.State == StPublishing {
+	if j.Published != nil || j.State == StPublishing || j.State == StSeeding || j.State == StDone {
 		m.mu.Unlock()
 		return errors.New("release déjà envoyée : elle reste dans son client")
 	}
@@ -500,6 +500,9 @@ func (m *Manager) seed(ctx context.Context, j *Job, t crossseed.Target, cfg *con
 			note = "liens impossibles : " + le.Reason
 		} else {
 			via = "links"
+		}
+		if errors.Is(err, crossseed.ErrInClient) {
+			via = "" // elle est là où elle était déjà, les liens sont retirés
 		}
 	}
 	if via == "origin" {

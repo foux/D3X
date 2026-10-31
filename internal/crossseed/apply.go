@@ -679,9 +679,13 @@ func (e *Engine) AddAndVerify(ctx context.Context, tg Target, cfg *config.Config
 // n'est resté sur le disque : l'appelant peut se replier sur les fichiers
 // d'origine. ErrInClient garde son sens (liens retirés).
 func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, key, id string, raw []byte, srcDir string) (string, error) {
+	reason := "pas de dossier de liens pour ce client (Réglages ▸ Liens)"
+	if cfg == nil || !cfg.Links.On || !cfg.Links.Publish {
+		reason = "les liens pour les publications sont éteints (Réglages ▸ Liens)"
+	}
 	link := e.publishLinker(cfg, tg)
 	if link == nil {
-		return "", &LinkError{Reason: "pas de dossier de liens pour ce client (Réglages ▸ Liens)"}
+		return "", &LinkError{Reason: reason}
 	}
 	t, err := torrent.Parse(raw)
 	if err != nil {

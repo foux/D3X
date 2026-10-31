@@ -140,11 +140,22 @@ func TestSeedExistingByLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !j.Links {
+	if g, _ := m.Get(j.ID); !g.Links {
 		t.Fatal("drapeau liens attendu")
 	}
 	if err := m.SeedExisting(j.ID); err != nil {
 		t.Fatal(err)
+	}
+	// Dès la demande, le client, son dossier et la voie sont figés : le seed
+	// les lit après le téléchargement du .torrent.
+	if err := m.SetClient(j.ID, "c1"); err == nil {
+		t.Fatal("changement de client accepté pendant le seed")
+	}
+	if _, _, err := m.SetClientDir(j.ID, "/ailleurs"); err == nil {
+		t.Fatal("changement de dossier accepté pendant le seed")
+	}
+	if err := m.SetLinks(j.ID, false); err == nil {
+		t.Fatal("changement de voie accepté pendant le seed")
 	}
 	wait(t, func() bool {
 		g, _ := m.Get(j.ID)
@@ -154,8 +165,12 @@ func TestSeedExistingByLinks(t *testing.T) {
 	if g.SeedError != "" || g.SeedVia != "links" || !strings.EqualFold(g.InfoHash, p.InfoHash) {
 		t.Fatalf("seed : %q via %q hash %s", g.SeedError, g.SeedVia, g.InfoHash)
 	}
-	if _, err := os.Stat(filepath.Join(liens, p.Name, "Film.2024.1080p.WEB.H264-D3X.mkv")); err != nil {
+	lk, err := os.Stat(filepath.Join(liens, p.Name, "Film.2024.1080p.WEB.H264-D3X.mkv"))
+	if err != nil {
 		t.Fatalf("lien attendu : %v", err)
+	}
+	if orig, _ := os.Stat(filepath.Join(dir, "Film.2024.1080p.WEB.H264-D3X.mkv")); !os.SameFile(lk, orig) {
+		t.Fatal("le lien n'est pas la même donnée que l'original")
 	}
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
