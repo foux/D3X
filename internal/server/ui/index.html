@@ -503,6 +503,8 @@
       <p class="hint">Chaque fichier de la release V3X y devient un lien physique vers le fichier de ta copie : aucune place en plus, ta copie n'est pas touchée, rien n'est écrasé. Le dossier doit exister, sur le même disque que tes fichiers, et D3X doit le voir (sur cette machine, avec les dossiers du client au-dessus, ou par ta seedbox). Utile surtout avec rTorrent, qui ne sait pas renommer.</p>
       <label class="check"><input id="l-sym" type="checkbox"> Liens symboliques plutôt que physiques</label>
       <p class="hint">Pour une copie qu'on ne peut pas lier physiquement : partage réseau en lecture seule (NFS, SMB), autre disque. Le lien vise le fichier tel que ton client le voit (avec les dossiers du client au-dessus) ; le dossier des liens peut alors être n'importe où, tant que ton client peut y écrire. Ne déplace pas ta copie ensuite : le lien pointerait dans le vide. Sous Windows, il faut le mode développeur.</p>
+      <label class="check"><input id="l-pub" type="checkbox"> Mes publications aussi</label>
+      <p class="hint">La release publiée (Publier, Lot, « Seeder la release V3X avec ces fichiers ») est rangée dans le dossier de liens du client qui la seede, ses fichiers étant des liens vers l'original, comme une release seedée pour plusieurs trackers. Sans dossier de liens pour ce client, ou si les liens échouent, elle part en seed sur ses fichiers d'origine, et D3X le dit. Publier et le Lot permettent de décocher pour une fois.</p>
     </fieldset>
     <fieldset id="ssh-set">
       <legend>Seedbox (SSH)</legend>
