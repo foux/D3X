@@ -100,6 +100,7 @@ func happy(entries ...releases.Entry) (*fakeDeps, *pubFake) {
 func quick(d Deps) *Engine {
 	e := New(d)
 	e.pause, e.poll, e.checkPoll = time.Millisecond, time.Millisecond, time.Millisecond
+	e.noteWait = 50 * time.Millisecond
 	return e
 }
 
@@ -259,6 +260,11 @@ func TestProcessReady(t *testing.T) {
 	if len(d.dropped) != 1 || d.dropped[0] != "/r/X" {
 		t.Errorf("fiche gardée non retirée : %v", d.dropped)
 	}
+	d.mu.Lock()
+	if len(d.linksSet) != 1 {
+		t.Fatalf("option liens non posée sur la release gardée : %v", d.linksSet)
+	}
+	d.mu.Unlock()
 
 	d, p = setup(true)
 	r = run(t, quick(d), Options{Sim: true}, "/r/X")
@@ -270,6 +276,53 @@ func TestProcessReady(t *testing.T) {
 	r = run(t, quick(d), Options{}, "/r/X")
 	if en := r.Entries[0]; en.State != "review" || en.Detail != "fiche gardée introuvable : « Revoir » pour la refaire" {
 		t.Fatalf("sans fiche gardée : %+v", en)
+	}
+}
+
+// Option « Seeder par liens » : posée sur chaque publication (vraie ou
+// fausse), et la ligne dit où la release est rangée, ou pourquoi elle est
+// partie sur ses fichiers d'origine.
+func TestProcessLinks(t *testing.T) {
+	d, p := happy(releases.Entry{Name: "A", Path: "/r/A", Video: true, Size: 10})
+	p.published = func(j *publish.Job) { j.SeedVia, j.LinksDir = "links", "/liens" }
+	r := run(t, quick(d), Options{Links: true}, "/r/A")
+	d.mu.Lock()
+	on, ok := d.linksSet["job-/r/A"]
+	d.mu.Unlock()
+	if !ok || !on {
+		t.Fatal("option liens non posée sur la publication")
+	}
+	if en := r.Entries[0]; en.State != "published" || !strings.HasSuffix(en.Detail, " · liens dans « /liens »") {
+		t.Fatalf("par liens : %+v", en)
+	}
+
+	// Repli : la raison est dite.
+	d, p = happy(releases.Entry{Name: "A", Path: "/r/A", Video: true, Size: 10})
+	p.published = func(j *publish.Job) {
+		j.SeedVia, j.LinksNote = "origin", "liens impossibles : le dossier des liens « /liens » n'existe pas"
+	}
+	r = run(t, quick(d), Options{Links: true}, "/r/A")
+	if en := r.Entries[0]; !strings.HasSuffix(en.Detail, " · liens impossibles : le dossier des liens « /liens » n'existe pas, seed sur les fichiers d'origine") {
+		t.Fatalf("repli : %+v", en)
+	}
+
+	// Option décochée : posée à faux, rien d'ajouté au détail.
+	d, p = happy(releases.Entry{Name: "A", Path: "/r/A", Video: true, Size: 10})
+	p.published = func(j *publish.Job) { j.SeedVia = "origin" }
+	r = run(t, quick(d), Options{}, "/r/A")
+	d.mu.Lock()
+	on, ok = d.linksSet["job-/r/A"]
+	d.mu.Unlock()
+	if !ok || on || strings.Contains(r.Entries[0].Detail, "liens") {
+		t.Fatalf("option décochée : posée=%v on=%v détail %q", ok, on, r.Entries[0].Detail)
+	}
+
+	// L'ajout au client traîne : la mention n'attend pas plus que noteWait.
+	d, p = happy(releases.Entry{Name: "A", Path: "/r/A", Video: true, Size: 10})
+	p.published = func(j *publish.Job) { j.State = publish.StSeeding }
+	r = run(t, quick(d), Options{Links: true}, "/r/A")
+	if en := r.Entries[0]; en.State != "published" || strings.Contains(en.Detail, "liens") {
+		t.Fatalf("ajout lent : %+v", en)
 	}
 }
 
