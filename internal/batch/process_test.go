@@ -261,10 +261,11 @@ func TestProcessReady(t *testing.T) {
 		t.Errorf("fiche gardée non retirée : %v", d.dropped)
 	}
 	d.mu.Lock()
-	if len(d.linksSet) != 1 {
-		t.Fatalf("option liens non posée sur la release gardée : %v", d.linksSet)
-	}
+	nLinks := len(d.linksSet)
 	d.mu.Unlock()
+	if nLinks != 1 {
+		t.Fatalf("option liens non posée sur la release gardée : %d", nLinks)
+	}
 
 	d, p = setup(true)
 	r = run(t, quick(d), Options{Sim: true}, "/r/X")
@@ -323,6 +324,22 @@ func TestProcessLinks(t *testing.T) {
 	r = run(t, quick(d), Options{Links: true}, "/r/A")
 	if en := r.Entries[0]; en.State != "published" || strings.Contains(en.Detail, "liens") {
 		t.Fatalf("ajout lent : %+v", en)
+	}
+
+	// Option refusée (client sans dossier de liens) : la raison est dite sur
+	// la ligne, sans attendre l'ajout au client.
+	d, p = happy(releases.Entry{Name: "A", Path: "/r/A", Video: true, Size: 10})
+	d.linksErr = errors.New("ce client n'a pas de dossier de liens (Réglages ▸ Liens)")
+	p.published = func(j *publish.Job) { j.State = publish.StSeeding }
+	e := quick(d)
+	e.noteWait = time.Hour
+	start := time.Now()
+	r = run(t, e, Options{Links: true}, "/r/A")
+	if en := r.Entries[0]; en.State != "published" || !strings.HasSuffix(en.Detail, " · liens impossibles : ce client n'a pas de dossier de liens (Réglages ▸ Liens), seed sur les fichiers d'origine") {
+		t.Fatalf("option refusée : %+v", en)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatal("option refusée : l'ajout au client a été attendu")
 	}
 }
 

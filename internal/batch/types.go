@@ -102,6 +102,8 @@ type Entry struct {
 	Job      string          `json:"job,omitempty"`
 	Active   bool            `json:"active,omitempty"`   // publiée et active (pas en attente de validation)
 	Requests json.RawMessage `json:"requests,omitempty"` // demandes ouvertes auxquelles elle répond
+
+	linksRefused string // option « liens » refusée pour cette publication : la raison, dite sur la ligne
 }
 
 // Run : un lot, en cours ou fini.

@@ -256,7 +256,9 @@ func (e *Engine) loop(l *lot) {
 		e.set(func(r *Run) { r.Current = en.Path })
 		e.progress(fmt.Sprintf("Lot : %d / %d", r.Done+1, r.Total), en.Name)
 		e.processSafe(l, en)
-		if !o.Sim && en.State == "published" && en.Job != "" {
+		// Option décochée : le seed ne passe jamais par les liens ni ne laisse
+		// de note, attendre l'ajout au client ne dirait rien.
+		if o.Links && !o.Sim && en.State == "published" && en.Job != "" {
 			e.noteLinks(l, en)
 		}
 		if o.WaitCheck && !o.Sim && en.State == "published" && en.Job != "" {

@@ -26,6 +26,7 @@ type fakeDeps struct {
 	last     map[string]journal.Event
 	holds    []time.Duration
 	linksSet map[string]bool
+	linksErr error
 
 	pubStart   func(path string) (*publish.Job, error)
 	pubGet     func(id string) (*publish.Job, bool)
@@ -52,7 +53,7 @@ func (d *fakeDeps) PubSetLinks(id string, on bool) error {
 		d.linksSet = map[string]bool{}
 	}
 	d.linksSet[id] = on
-	return nil
+	return d.linksErr
 }
 
 func (d *fakeDeps) Source(id string) (source.Source, error) { return source.Local{}, nil }

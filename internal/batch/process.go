@@ -161,7 +161,10 @@ func (e *Engine) process(l *lot, en *Entry) {
 	}
 	l.job = j.ID
 	cancel := func() { e.deps.PubCancel(j.ID); l.job = "" }
-	_ = e.deps.PubSetLinks(j.ID, o.Links) // refusé : elle partira sur ses fichiers d'origine
+	if err := e.deps.PubSetLinks(j.ID, o.Links); err != nil && o.Links {
+		// Refusée : elle partira sur ses fichiers d'origine, la ligne dira pourquoi.
+		e.set(func(*Run) { en.linksRefused = err.Error() })
+	}
 	if j.Duplicate != nil {
 		cancel()
 		e.decide(src, en, "duplicate", dupText(j.Duplicate), j.Duplicate.ID)
@@ -474,7 +477,10 @@ func (e *Engine) processReady(l *lot, en *Entry) {
 	}
 	l.job = j.ID
 	cancel := func() { e.deps.PubCancel(j.ID); l.job = "" }
-	_ = e.deps.PubSetLinks(j.ID, r.Options.Links) // refusé : elle partira sur ses fichiers d'origine
+	if err := e.deps.PubSetLinks(j.ID, r.Options.Links); err != nil && r.Options.Links {
+		// Refusée : elle partira sur ses fichiers d'origine, la ligne dira pourquoi.
+		e.set(func(*Run) { en.linksRefused = err.Error() })
+	}
 	if j.Duplicate != nil {
 		cancel()
 		e.decide(src, en, "duplicate", dupText(j.Duplicate), j.Duplicate.ID)
@@ -546,6 +552,12 @@ func (e *Engine) publishWith(l *lot, en *Entry, j *publish.Job, fields map[strin
 // d'origine en repli) n'est connue qu'une fois l'ajout au client fait. Attendue
 // au plus noteWait, coupée par « Arrêter » ; passé le délai, rien n'est dit.
 func (e *Engine) noteLinks(l *lot, en *Entry) {
+	if en.linksRefused != "" { // option refusée à la pose : rien à attendre
+		e.set(func(*Run) {
+			en.Detail += " · liens impossibles : " + en.linksRefused + ", seed sur les fichiers d'origine"
+		})
+		return
+	}
 	deadline := time.Now().Add(e.noteWait)
 	for {
 		j, ok := e.deps.PubGet(en.Job)
