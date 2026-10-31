@@ -1558,7 +1558,7 @@ function renderDone() {
   else if (!j.seed || (j.seed.status === "checking" && !j.seed.detail)) seed = "Seed : ton client vérifie les fichiers" + (j.seed && j.seed.progress ? " (" + Math.round(j.seed.progress * 100) + " %)" : "") + "…";
   else if (j.seed.status === "seeding") seed = "Seed : vérifié à 100 %, ta release est en seed.";
   else seed = "Seed : " + (j.seed.detail || j.seed.status);
-  if (j.linksNote) seed += " " + j.linksNote.charAt(0).toUpperCase() + j.linksNote.slice(1) + " : seed sur les fichiers d'origine.";
+  if (j.linksNote) seed += " " + j.linksNote.charAt(0).toUpperCase() + j.linksNote.slice(1) + ", seed sur les fichiers d'origine.";
   else if (j.seedVia === "links") seed += " Rangée par liens dans « " + j.linksDir + " ».";
   const s = el("p", null, seed);
   const again = el("button", "btn", "Publier une autre release");
