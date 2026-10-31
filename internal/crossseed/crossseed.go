@@ -264,10 +264,16 @@ func (e *Engine) publishLinker(cfg *config.Config, t Target) Linker {
 
 // LinkError : les liens n'ont pas pu être posés, ou l'ajout qui les suivait a
 // échoué avant d'entrer dans le client ; rien n'est resté. L'appelant peut se
-// replier sur les fichiers d'origine.
-type LinkError struct{ Reason string }
+// replier sur les fichiers d'origine. Reason est le message, Err l'erreur
+// d'origine quand il y en a une.
+type LinkError struct {
+	Reason string
+	Err    error
+}
 
 func (e *LinkError) Error() string { return e.Reason }
+
+func (e *LinkError) Unwrap() error { return e.Err }
 
 // ---------- analyse ----------
 

@@ -102,9 +102,14 @@ func TestAddLinked(t *testing.T) {
 	}
 	r.e.mu.Lock()
 	w := r.e.watches[r.hash]
+	var ldir string
+	var nl int
+	if w != nil {
+		ldir, nl = w.LinksDir, len(w.Links)
+	}
 	r.e.mu.Unlock()
-	if w == nil || w.LinksDir != "/data/liens" || len(w.Links) != 2 {
-		t.Fatalf("surveillance sans les liens : %+v", w)
+	if w == nil || ldir != "/data/liens" || nl != 2 {
+		t.Fatalf("surveillance sans les liens : %q, %d liens", ldir, nl)
 	}
 	r.e.HoldPublished(0)
 	waitFor(t, func() bool { st, ok := r.e.WatchOf(r.hash); return ok && st.Status == StSeeding })
@@ -184,7 +189,40 @@ func TestAddLinkedInClient(t *testing.T) {
 	}
 	r.fq.mu.Lock()
 	defer r.fq.mu.Unlock()
-	if len(r.gone) != len(r.made) || len(r.made) == 0 {
+	if strings.Join(dsts(r.gone), "|") != strings.Join(dsts(r.made), "|") || len(r.made) == 0 {
 		t.Fatalf("posés %v, retirés %v", r.made, r.gone)
+	}
+}
+
+// Vérification qui échoue après un ajout par liens, puis « Retirer » : le
+// torrent sort du client et les liens sont enlevés, l'original n'est pas
+// touché (ici : seul le disque simulé sous /data/liens bouge).
+func TestRemoveLinked(t *testing.T) {
+	r := newLinkedRig(t, true)
+	// Le lien vers la vidéo n'a pas la bonne taille sur le disque simulé
+	// (fichier modifié entre le hachage et la vérification) : la vérification
+	// tombe sous 100 %, le torrent reste arrêté.
+	r.shrink = "Film.2024.mkv"
+	if _, err := r.e.AddLinked(context.Background(), r.tg, r.cfg, "pub:1", "fiche-1", r.raw, "/data/films"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { st, ok := r.e.WatchOf(r.hash); return ok && st.Status == StFailed })
+	if err := r.e.Remove("pub:1"); err != nil {
+		t.Fatalf("Remove : %v", err)
+	}
+	r.fq.mu.Lock()
+	defer r.fq.mu.Unlock()
+	if len(r.fq.deleted) != 1 || r.fq.deleted[0] != r.hash {
+		t.Fatalf("retirés du client : %v", r.fq.deleted)
+	}
+	if strings.Join(dsts(r.gone), "|") != strings.Join(dsts(r.made), "|") || len(r.gone) != 2 {
+		t.Fatalf("liens posés %v, retirés %v", r.made, r.gone)
+	}
+	if r.fq.disk["/data/films/Film.2024/Film.2024.nfo"] != 10 {
+		t.Fatal("l'original a été touché")
+	}
+	st, _ := r.e.WatchOf(r.hash)
+	if st.Status != StRemoved || !strings.Contains(st.Detail, "liens retirés") {
+		t.Fatalf("après retrait : %+v", st)
 	}
 }

@@ -681,25 +681,29 @@ func (e *Engine) AddAndVerify(ctx context.Context, tg Target, cfg *config.Config
 func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, key, id string, raw []byte, srcDir string) (string, error) {
 	link := e.publishLinker(cfg, tg)
 	if link == nil {
-		return "", &LinkError{"pas de dossier de liens pour ce client (Réglages ▸ Liens)"}
+		return "", &LinkError{Reason: "pas de dossier de liens pour ce client (Réglages ▸ Liens)"}
 	}
 	t, err := torrent.Parse(raw)
 	if err != nil {
 		return "", errors.New("le .torrent reçu de V3X est illisible")
 	}
 	dir := strings.TrimSpace(tg.LinksDir)
+	srcDir = strings.TrimSpace(srcDir)
 	// Un torrent du client occupe déjà cet emplacement du dossier de liens :
 	// on ne pose rien dessus. Un chemin vide (client qui ne le donne pas) ne
-	// compte pas : il serait « au-dessus » de tout.
+	// compte pas : il serait « au-dessus » de tout. Sans la liste du client,
+	// on ne pose rien à l'aveugle : l'appelant se replie sur l'origine.
 	target := clientJoin(dir, t.Name)
-	if all, err := tg.Client.List(ctx, nil); err == nil {
-		for _, x := range all {
-			if strings.TrimSpace(x.ContentPath) == "" {
-				continue
-			}
-			if under(x.ContentPath, target) || under(target, x.ContentPath) {
-				return "", &LinkError{"« " + t.Name + " » est déjà l'emplacement d'un torrent dans ton dossier de liens"}
-			}
+	all, err := tg.Client.List(ctx, nil)
+	if err != nil {
+		return "", &LinkError{Reason: "liste du client illisible : " + err.Error(), Err: err}
+	}
+	for _, x := range all {
+		if strings.TrimSpace(x.ContentPath) == "" {
+			continue
+		}
+		if under(x.ContentPath, target) || under(target, x.ContentPath) {
+			return "", &LinkError{Reason: "« " + t.Name + " » est déjà l'emplacement d'un torrent dans ton dossier de liens"}
 		}
 	}
 	lp := make([]links.Pair, 0, len(t.Files))
@@ -707,7 +711,7 @@ func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, k
 		lp = append(lp, links.Pair{Src: clientJoin(srcDir, f.Path), Dst: clientJoin(dir, f.Path), Size: f.Size})
 	}
 	if err := link(ctx, tg.PathMap, dir, lp, false); err != nil {
-		return "", &LinkError{"liens : " + err.Error()}
+		return "", &LinkError{Reason: "liens : " + err.Error(), Err: err}
 	}
 	hash, err := e.AddAndVerify(ctx, tg, cfg, key, id, raw, dir)
 	if err != nil {
@@ -715,7 +719,7 @@ func (e *Engine) AddLinked(ctx context.Context, tg Target, cfg *config.Config, k
 			_ = link(context.Background(), tg.PathMap, dir, lp, true)
 		}
 		if hash == "" {
-			return "", &LinkError{err.Error()}
+			return "", &LinkError{Reason: err.Error(), Err: err}
 		}
 		return hash, err
 	}
@@ -769,9 +773,30 @@ func (e *Engine) Remove(key string) error {
 			return err
 		}
 	}
+	// Les liens posés pour cet ajout partent avec lui ; l'original reste
+	// (links.Remove n'efface qu'un fichier qui est la même donnée que sa
+	// source). Le créateur de liens est pris tel quel : le réglage a pu être
+	// éteint depuis, les liens existent quand même.
+	e.mu.Lock()
+	var ldir string
+	var lp []links.Pair
+	if w := e.watches[hash]; w != nil {
+		ldir, lp = w.LinksDir, w.Links
+	}
+	link := e.linker
+	e.mu.Unlock()
+	detail := "retiré du client, fichiers intacts"
+	if len(lp) > 0 {
+		detail = "retiré du client, liens retirés, fichiers intacts"
+		if link == nil {
+			detail = "retiré du client, fichiers intacts ; liens laissés en place (créateur de liens absent)"
+		} else if lerr := link(ctx, t.PathMap, ldir, lp, true); lerr != nil {
+			detail = "retiré du client, fichiers intacts ; liens : " + lerr.Error()
+		}
+	}
 	e.mu.Lock()
 	if w := e.watches[hash]; w != nil {
-		w.Status, w.Detail = StRemoved, "retiré du client, fichiers intacts"
+		w.Status, w.Detail = StRemoved, detail
 		journal.Add(journal.Event{Kind: "removed", Name: w.Name, InfoHash: hash, ID: w.ID, Detail: w.Detail})
 	}
 	e.mu.Unlock()

@@ -414,6 +414,7 @@ func (e *Engine) addLinked(ctx context.Context, tg Target, cfg *config.Config, r
 		}
 		return StFailed, err.Error()
 	}
+	e.setLinks(hash, dir, lp)
 	return StChecking, fmt.Sprintf("%d lien%s physique%s dans « %s », ta copie n'est pas touchée", len(lp), plural(len(lp)), plural(len(lp)), dir)
 }
 
